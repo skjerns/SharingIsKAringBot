@@ -26,10 +26,8 @@ except:
     except:
         raise
 
-token = ''
 
 settings_file = os.path.expanduser('~/.sharingiskaringbot')
-
 
 with open(settings_file) as f:
     settings = json.load(f)
@@ -78,6 +76,13 @@ class Bot(telepot.Bot):
         bot.send_message(admin_chat_id, message, disable_notification=True,
                         parse_mode = 'html')
 
+    def send_not_answer_reminder(self, msg):
+        from_member = Member(msg['from'])
+        text = 'Du hast gerade in der SharingIsKAring-Gruppe auf eine Nachricht geantwortet. ' \
+               'Bitte benutze die Antworten-Funktion nur in Ausnahmefällen und schreibe sonst alles mit der Person in einem <b>privaten Chat</b>\n' \
+               'Dies gilt insbesondere für <i>"Ich habe Interesse", "Danke"</i>, etc.\n\n' \
+               'Bitte lösche deine Nachricht wieder und sende sie als <b>private Nachricht</b> (außer du denkst, sie ist wirklich für alle 500+ Leute relevant.). Piep-boop, ich bin ein Bot🤖.'
+        self.send_message(from_member, text, parse_mode='html')
 
     def log(self):
         pass
@@ -103,16 +108,28 @@ class Bot(telepot.Bot):
                             parse_mode='MarkdownV2', disable_notification=True)
                 self.send_message(chat_id, f'Hi, I\'m a bot. Please see my source code at https://github.com/skjerns/SharingIsKAringBot.\n'\
                                            f'You sent me "{msg["text"]}", but I have no idea what that means.', parse_mode='MarkdownV2')
-            elif chat_type=='supergroup' and (('text' in msg) or ('photo' in msg)):
-                pass
-            elif content_type=='new_chat_member':
-                self.deleteMessage(msg_id)
-                self.forward_new_user_messages(msg)
-            elif content_type=='left_chat_member':
-                self.deleteMessage(msg_id)
-                self.forward_user_left_messages(msg)
+            elif chat_type=='supergroup' and  str(chat_id)==str(group_chat_id):
+
+                if ('text' in msg) or ('photo' in msg):
+                    pass
+
+                elif content_type=='new_chat_member':
+                    # remove new chat member message and forward to admin chat
+                    self.deleteMessage(msg_id)
+                    self.forward_new_user_messages(msg)
+
+                elif content_type=='left_chat_member':
+                    # remove chat member deleted message and forward to admin chat
+                    self.deleteMessage(msg_id)
+                    self.forward_user_left_messages(msg)
+
+                elif content_type=='text' and ('reply_to_message' in msg):
+                    # remind users not to answer in group
+                    self.send_not_answer_reminder(msg)
+
             else:
-                self.send_message(debug_chat_id, f'type: {content_type}\nchat: {chat_type}\n```\n{pformat(msg)}\n```',
+                # if none of the above: send debug message.
+                self.send_message(debug_chat_id, f'No action taken.\ntype: {content_type}\nchat: {chat_type}\n```\n{pformat(msg)}\n```',
                             parse_mode='MarkdownV2', disable_notification=True)
         except Exception as e:
             import traceback
@@ -123,7 +140,7 @@ class Bot(telepot.Bot):
         print('-'*10)
         pprint(msg)
 
-
+#%%
 bot = Bot(token)
 MessageLoop(bot, bot.hdl).run_as_thread()
 
