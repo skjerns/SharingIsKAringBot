@@ -12,19 +12,23 @@ import telepot
 import time
 from pprint import pprint as pprint, pformat
 import json
-import urllib
+import requests
+from requests.exceptions import ProxyError, ConnectionError
 
 try:
-    print('Testing connection')
-    urllib.request.urlopen('http://api.telegram.org/')
+    print('Testing connection...')
+    requests.get('http://api.telegram.org/')
     print('Success.')
-except:
+
+except ConnectionError:
     try:
-        print('Trying again with proxy')
+        print('Trying again with proxy...')
+        proxies = {'http': 'http:proxy.server:3128'}
+        requests.get('http://api.telegram.org/', proxies=proxies)
         telepot.api.set_proxy('http://proxy.server:3128')
         print('Success with proxy.')
-    except:
-        raise
+    except ProxyError:
+        print('Cannot connect to proxy.')
 
 
 settings_file = os.path.expanduser('~/.sharingiskaringbot')
