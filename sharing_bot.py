@@ -6,6 +6,7 @@ TODO: argparse input stuff
 
 @author: skjerns
 """
+from threading import Thread, Event
 import os
 from telepot.loop import MessageLoop
 import telepot
@@ -13,14 +14,17 @@ import time
 from pprint import pprint as pprint, pformat
 import json
 import requests
-from requests.exceptions import ProxyError, ConnectionError
+from requests.exceptions import ProxyError, ConnectionError, Timeout
+import logging
+logging.basicConfig(level=logging.INFO,
+                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 try:
     print('Testing connection...')
     requests.get('http://api.telegram.org/')
     print('Success.')
 
-except ConnectionError:
+except (ConnectionError, Timeout):
     try:
         print('Trying again with proxy...')
         proxies = {'http': 'http:proxy.server:3128'}
@@ -41,6 +45,8 @@ with open(settings_file) as f:
     debug_chat_id = settings.get('debug_chat_id', admin_chat_id)
 
 
+
+
 class Member():
     def __init__(self, member):
         self.id = member.get('id')
@@ -55,11 +61,28 @@ class Member():
         return self.id==other.id
 
 
+def check_namechange(bot=None, chat_id=None, delay=None, member=None):
+    print(f"sending reminder in {delay}")
+    Event().wait(delay)
+    curr_member = Member(bot.getChatMember(group_chat_id, member.id).get('user'))
+    prevname = str(member.first) + str(member.last)
+    currname =  (str(curr_member.first) + str(curr_member.last))
+    print(f"{prevname} == {currname} ? {prevname==currname}")
+    if prevname != currname and not member.id in bot.warned_users:
+        message = f'Changed name from <a href="tg://user?id={member.id}">{prevname}</a> to <a href="tg://user?id={member.id}">{currname}</a>, {delay//3600} hours after joining. Usually bots do this.'
+        bot.send_message(admin_chat_id, message, disable_notification=True, parse_mode = 'html')
+        bot.warned_users.append(member.id)
+        
+
 class Bot(telepot.Bot):
+
+    warned_users = []
+
     def forward_new_user_messages(self, msg):
         from_member = Member(msg['from'])
         chat_name = msg['chat'].get('username')
-        for new_member in map(Member, msg['new_chat_members']):
+        new_members = map(Member, msg['new_chat_members'])
+        for new_member in new_members:
             if from_member==new_member:
                 message = f'<a href="tg://user?id={new_member.id}">{new_member.first} {new_member.last}</a> joined {chat_name}'
             else:
@@ -67,6 +90,16 @@ class Bot(telepot.Bot):
                           f'<a href="tg://user?id={new_member.id}">{new_member.first} {new_member.last}</a> to {chat_name}'
             bot.send_message(admin_chat_id, message, disable_notification=True,
                             parse_mode = 'html')
+
+            for i in [0.1] + list(range(1, 12, 2)):
+                delay = i * 3600.0 # 6 hours afterwards
+                wait_thread = Thread(target=check_namechange,
+                       kwargs={'bot':bot,
+                               'chat_id': admin_chat_id,
+                               'delay': delay,
+                               'member': new_member})
+                wait_thread.start()
+
 
     def forward_user_left_messages(self, msg):
         from_member = Member(msg['from'])
@@ -87,6 +120,7 @@ class Bot(telepot.Bot):
                'Dies gilt insbesondere für <i>"Ich habe Interesse", "Danke"</i>, etc.\n\n' \
                'Bitte lösche deine Nachricht wieder und sende sie als <b>private Nachricht</b> (außer du denkst, sie ist wirklich für alle 500+ Leute relevant.). Piep-boop, ich bin ein Bot🤖.'
         self.send_message(from_member, text, parse_mode='html')
+
 
     def log(self):
         pass
@@ -112,6 +146,7 @@ class Bot(telepot.Bot):
                             parse_mode='MarkdownV2', disable_notification=True)
                 self.send_message(chat_id, f'Hi, I\'m a bot. Please see my source code at https://github.com/skjerns/SharingIsKAringBot.\n'\
                                            f'You sent me "{msg["text"]}", but I have no idea what that means.', parse_mode='MarkdownV2')
+
             elif chat_type=='supergroup' and  str(chat_id)==str(group_chat_id):
 
                 if ('text' in msg) or ('photo' in msg):
@@ -142,7 +177,10 @@ class Bot(telepot.Bot):
             pprint(f'ERROR, wait 2 sec :{pformat(str(e)), pformat(repr(e))}')
             time.sleep(2)
         print('-'*10)
-        pprint(msg)
+        try:
+            pprint(msg)
+        except:
+            print(msg)
 
 #%%
 bot = Bot(token)
