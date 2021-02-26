@@ -6,11 +6,13 @@ TODO: argparse input stuff
 
 @author: skjerns
 """
+from urllib3.exceptions import ProtocolError
 from threading import Thread, Event
 import os
 from telepot.loop import MessageLoop
 import telepot
 import time
+import numpy as np
 from pprint import pprint as pprint, pformat
 import json
 import requests
@@ -60,19 +62,33 @@ class Member():
     def __eq__(self, other):
         return self.id==other.id
 
+    def __str__(self):
+        return f'{self.id} - {self.first} {self.last}'
+    
+    def __repr__(self):	
+        return f'Member({self.id} - {self.first} {self.last})'
 
 def check_namechange(bot=None, chat_id=None, delay=None, member=None):
-    print(f"sending reminder in {delay}")
-    Event().wait(delay)
+    Event().wait(delay + np.random.randint(255))
+    print(f"check for {member} after {delay}")	
+    bot = Bot(token)
     curr_member = Member(bot.getChatMember(group_chat_id, member.id).get('user'))
-    prevname = str(member.first) + str(member.last)
-    currname =  (str(curr_member.first) + str(curr_member.last))
-    print(f"{prevname} == {currname} ? {prevname==currname}")
+    prevname = (str(member.first) + str(member.last)).encode('utf8')
+    currname =  ((str(curr_member.first) + str(curr_member.last))).encode('utf8')
+    print(f"{prevname} == {currname} ? {prevname==currname}", end='')
     if prevname != currname and not member.id in bot.warned_users:
         message = f'Changed name from <a href="tg://user?id={member.id}">{prevname}</a> to <a href="tg://user?id={member.id}">{currname}</a>, {delay//3600} hours after joining. Usually bots do this.'
         bot.send_message(admin_chat_id, message, disable_notification=True, parse_mode = 'html')
         bot.warned_users.append(member.id)
-        
+
+
+def destroy_message(bot=None, msg_identifier=None, delay=None):
+    print(f"Destroying message in {delay}")
+    Event().wait(delay)
+    print(f'Deleting message {msg_identifier}')
+    bot.deleteMessage(msg_identifier)
+    print('Success')
+
 
 class Bot(telepot.Bot):
 
@@ -91,8 +107,8 @@ class Bot(telepot.Bot):
             bot.send_message(admin_chat_id, message, disable_notification=True,
                             parse_mode = 'html')
 
-            for i in [0.1] + list(range(1, 12, 2)):
-                delay = i * 3600.0 # 6 hours afterwards
+            for i in [0.1] + list(range(1, 12, 2)) + [24, 36]:
+                delay = i * 3600.0 #  hours afterwards
                 wait_thread = Thread(target=check_namechange,
                        kwargs={'bot':bot,
                                'chat_id': admin_chat_id,
@@ -114,27 +130,36 @@ class Bot(telepot.Bot):
                         parse_mode = 'html')
 
     def send_not_answer_reminder(self, msg):
-        from_member = Member(msg['from'])
-        text = 'Du hast gerade in der SharingIsKAring-Gruppe auf eine Nachricht geantwortet. ' \
-               'Bitte benutze die Antworten-Funktion nur in Ausnahmefällen und schreibe sonst alles mit der Person in einem <b>privaten Chat</b>\n' \
-               'Dies gilt insbesondere für <i>"Ich habe Interesse", "Danke"</i>, etc.\n\n' \
-               'Bitte lösche deine Nachricht wieder und sende sie als <b>private Nachricht</b> (außer du denkst, sie ist wirklich für alle 500+ Leute relevant.). Piep-boop, ich bin ein Bot🤖.'
-        self.send_message(from_member, text, parse_mode='html')
+        if not hasattr(self, 'last_reminder'): self.last_reminder = time.time()-3600
 
+        if time.time() - self.last_reminder < 120:
+            print('Not sending reminder, as previous reminder has been sent recently')
+            return
+
+        timer = 30
+        text = 'Kleine Erinnerung: Bitte antworte im Hauptchat nur, wenn es für alle 1000+ Mitglieder relevant ist. ' \
+               'Falls deine Antwort nur <i>"Ich habe Interesse", "Danke", "Reserviert", etc</i>, ist, ' \
+               'sende besser eine private Nachricht an die betreffende Person, oder editiere deine Ursprüngliche Nachricht. Vielen Dank für dein Verständnis und habe noch einen schönen Tag 😊\n\n' \
+               f'Diese Nachricht zerstört sich in {timer} Sekunden selbst 💣💥.'
+        posted_msg = self.send_message(group_chat_id, text, parse_mode='html',
+                          disable_notification=True, reply_to_message_id=msg['message_id'])
+        msg_identifier = telepot.message_identifier(posted_msg)
+        Thread(target=destroy_message,  kwargs={'bot':bot, 'delay': timer,  'msg_identifier': msg_identifier}).start()
+        self.last_reminder = time.time()
 
     def log(self):
         pass
 
     def send_message(self, chat_id,  message, disable_notification=False,
-                        parse_mode='MarkdownV2'):
+                        parse_mode='MarkdownV2', reply_to_message_id=None):
         if parse_mode.lower()=='markdownv2':
             reserved = "#'_*[]()~`#+-|{}.!>"
         else:
             reserved = ''
         for char in reserved:
             message = message.replace(char, f'\\{char}')
-        self.sendMessage(chat_id, message, disable_notification=disable_notification,
-                         parse_mode=parse_mode)
+        return self.sendMessage(chat_id, message, disable_notification=disable_notification,
+                         parse_mode=parse_mode, reply_to_message_id=reply_to_message_id)
 
     def hdl(self, msg):
         content_type, chat_type, chat_id = telepot.glance(msg)
@@ -149,20 +174,17 @@ class Bot(telepot.Bot):
 
             elif chat_type=='supergroup' and  str(chat_id)==str(group_chat_id):
 
-                if ('text' in msg) or ('photo' in msg):
-                    pass
-
-                elif content_type=='new_chat_member':
+                if content_type=='new_chat_member':
                     # remove new chat member message and forward to admin chat
                     self.deleteMessage(msg_id)
                     self.forward_new_user_messages(msg)
 
-                elif content_type=='left_chat_member':
+                if content_type=='left_chat_member':
                     # remove chat member deleted message and forward to admin chat
                     self.deleteMessage(msg_id)
                     self.forward_user_left_messages(msg)
 
-                elif content_type=='text' and ('reply_to_message' in msg):
+                if content_type=='text' and ('reply_to_message' in msg):
                     # remind users not to answer in group
                     self.send_not_answer_reminder(msg)
 
@@ -170,6 +192,9 @@ class Bot(telepot.Bot):
                 # if none of the above: send debug message.
                 self.send_message(debug_chat_id, f'No action taken.\ntype: {content_type}\nchat: {chat_type}\n```\n{pformat(msg)}\n```',
                             parse_mode='MarkdownV2', disable_notification=True)
+        except (OSError,ProtocolError):
+            print('\nConnection reset.\n')
+            time.sleep(2)
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -177,10 +202,11 @@ class Bot(telepot.Bot):
             pprint(f'ERROR, wait 2 sec :{pformat(str(e)), pformat(repr(e))}')
             time.sleep(2)
         print('-'*10)
+        if 'photo' in msg: del msg['photo']
         try:
             pprint(msg)
         except:
-            print(msg)
+            print(str(msg).encode())
 
 #%%
 bot = Bot(token)
@@ -188,10 +214,10 @@ MessageLoop(bot, bot.hdl).run_as_thread()
 
 print("Bot running...")
 
-while True:
-    try:
-        time.sleep(5)
-        print('.', end='', flush=True)
-    except Exception as e:
-        bot.send_message(debug_chat_id, f'Script ended: {time.ctime()}')
-        bot.send_message(debug_chat_id, f'{str(e)} {repr(e)}')
+# while True:
+#     try:
+#         time.sleep(5)
+#         print('.', end='', flush=True)
+#     except Exception as e:
+#         bot.send_message(debug_chat_id, f'Script ended: {time.ctime()}')
+#         bot.send_message(debug_chat_id, f'{str(e)} {repr(e)}')
