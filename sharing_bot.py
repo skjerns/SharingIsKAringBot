@@ -64,7 +64,7 @@ class Member():
 
     def __str__(self):
         return f'{self.id} - {self.first} {self.last}'
-    
+
     def __repr__(self):	
         return f'Member({self.id} - {self.first} {self.last})'
 
@@ -214,10 +214,10 @@ MessageLoop(bot, bot.hdl).run_as_thread()
 
 print("Bot running...")
 
-# while True:
-#     try:
-#         time.sleep(5)
-#         print('.', end='', flush=True)
-#     except Exception as e:
-#         bot.send_message(debug_chat_id, f'Script ended: {time.ctime()}')
-#         bot.send_message(debug_chat_id, f'{str(e)} {repr(e)}')
+while True:
+    try:
+        time.sleep(5)
+        print('.', end='', flush=True)
+    except Exception as e:
+        bot.send_message(debug_chat_id, f'Script ended: {time.ctime()}')
+        bot.send_message(debug_chat_id, f'{str(e)} {repr(e)}')
