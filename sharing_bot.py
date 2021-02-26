@@ -138,8 +138,9 @@ class Bot(telepot.Bot):
 
         timer = 30
         text = 'Kleine Erinnerung: Bitte antworte im Hauptchat nur, wenn es für alle 1000+ Mitglieder relevant ist. ' \
-               'Falls deine Antwort nur <i>"Ich habe Interesse", "Danke", "Reserviert", etc</i>, ist, ' \
-               'sende besser eine private Nachricht an die betreffende Person, oder editiere deine Ursprüngliche Nachricht. Vielen Dank für dein Verständnis und habe noch einen schönen Tag 😊\n\n' \
+               'Falls deine Antwort nur etwas wie <i>"Ich habe Interesse", "Danke", "Reserviert", etc</i>, ist, ' \
+               'sende besser eine private Nachricht an die betreffende Person, oder editiere deine Ursprüngliche Nachricht. '\
+               'Vielen Dank für dein Verständnis und habe noch einen schönen Tag 😊\n\n' \
                f'Diese Nachricht zerstört sich in {timer} Sekunden selbst 💣💥.'
         posted_msg = self.send_message(group_chat_id, text, parse_mode='html',
                           disable_notification=True, reply_to_message_id=msg['message_id'])
