@@ -168,7 +168,7 @@ class Bot(telepot.Bot):
         Thread(target=destroy_message,  kwargs={'bot':bot, 'delay': timer,  'msg_identifier': msg_identifier}).start()
         self.last_reminder = time.time()
         from_member = Member(msg['from'])
-        self.send_message(admin_chat_id, f'No-Reply-Reminder sent to <a href="tg://user?id={from_member.id}">{from_member}, destroy in 30 seconds', parse_mode='html',
+        self.send_message(admin_chat_id, f'No-Reply-Reminder sent to <a href="tg://user?id={from_member.id}">{from_member}</a>, destroy in 30 seconds', parse_mode='html',
                           disable_notification=True)
 
     def log(self):
