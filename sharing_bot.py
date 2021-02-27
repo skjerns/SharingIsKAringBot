@@ -18,6 +18,9 @@ import json
 import requests
 from requests.exceptions import ProxyError, ConnectionError, Timeout
 import logging
+from telepot.namedtuple import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
+
+
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
@@ -90,6 +93,7 @@ def destroy_message(bot=None, msg_identifier=None, delay=None):
     print('Success')
 
 
+
 class Bot(telepot.Bot):
 
     warned_users = []
@@ -116,6 +120,22 @@ class Bot(telepot.Bot):
                                'member': new_member})
                 wait_thread.start()
 
+    # This doesnt work unfortunately
+    # def restrict_new_user(self, member):
+    #     # TODO until_date UNIX
+    #     # self.restrictChatMember(group_chat_id, member.id, can_send_messages=False)
+    #     keyboard = [[KeyboardButton(text='Drücke den anderen Knopf\num zu bestätigen,\ndass du kein Bot bist\n====>>>', callback='wrong'),
+    #                 KeyboardButton(text='click me', callback='Drücke mich!')]]
+    #     markup = ReplyKeyboardMarkup(keyboard=keyboard, selective=True)
+    #     msg = self.sendMessage(group_chat_id, 'testing custom keyboard @skjerns', reply_markup = markup)
+    #     self.deleteMessage(telepot.message_identifier(msg))
+
+
+    # def unrestrict_new_user(self, member):
+    #     # self.restrictChatMember(group_chat_id, member.id, can_send_messages=True) # until_date UNIX
+    #     self.sendMessage(group_chat_id, 'testing custom keyboard @skjerns', reply_markup = ReplyKeyboardRemove(selective=True))
+
+
 
     def forward_user_left_messages(self, msg):
         from_member = Member(msg['from'])
@@ -139,7 +159,7 @@ class Bot(telepot.Bot):
         timer = 30
         text = 'Kleine Erinnerung: Bitte antworte im Hauptchat nur, wenn es für alle 1000+ Mitglieder relevant ist. ' \
                'Falls deine Antwort nur etwas wie <i>"Ich habe Interesse", "Danke", "Reserviert", etc</i>, ist, ' \
-               'sende besser eine private Nachricht an die betreffende Person, oder editiere deine Ursprüngliche Nachricht. '\
+               'sende besser eine private Nachricht an die betreffende Person, oder editiere deine ursprüngliche Nachricht. '\
                'Vielen Dank für dein Verständnis und habe noch einen schönen Tag 😊\n\n' \
                f'Diese Nachricht zerstört sich in {timer} Sekunden selbst 💣💥.'
         posted_msg = self.send_message(group_chat_id, text, parse_mode='html',
@@ -147,7 +167,8 @@ class Bot(telepot.Bot):
         msg_identifier = telepot.message_identifier(posted_msg)
         Thread(target=destroy_message,  kwargs={'bot':bot, 'delay': timer,  'msg_identifier': msg_identifier}).start()
         self.last_reminder = time.time()
-        self.send_message(admin_chat_id, f"No-Reply-Reminder sent to {Member(msg['from'])}, destroy in 30 seconds", parse_mode='html',
+        from_member = Member(msg['from'])
+        self.send_message(admin_chat_id, f'No-Reply-Reminder sent to <a href="tg://user?id={from_member.id}">{from_member}, destroy in 30 seconds', parse_mode='html',
                           disable_notification=True)
 
     def log(self):
@@ -191,6 +212,11 @@ class Bot(telepot.Bot):
                     # remind users not to answer in group
                     self.send_not_answer_reminder(msg)
 
+                # elif content_type=='text':
+                #     # remind users not to answer in group
+                #     self.restrict_new_user(msg_id)
+
+
             else:
                 # if none of the above: send debug message.
                 self.send_message(debug_chat_id, f'No action taken.\ntype: {content_type}\nchat: {chat_type}\n```\n{pformat(msg)}\n```',
@@ -211,7 +237,7 @@ class Bot(telepot.Bot):
         except:
             print(str(msg).encode())
 
-#%%
+#%% Main
 bot = Bot(token)
 MessageLoop(bot, bot.hdl).run_as_thread()
 
